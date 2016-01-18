@@ -1,0 +1,15 @@
+language: cpp
+before_install:
+  - tools/ci/before-install.sh
+install: 
+  - tools/ci/install.sh
+script:
+  - tools/ci/build.sh
+compiler:
+  - clang
+  - gcc
+env:
+  - OGRE_VERSION=1.7
+  - OGRE_VERSION=1.8
+  - OGRE_VERSION=1.9
+sudo: true
