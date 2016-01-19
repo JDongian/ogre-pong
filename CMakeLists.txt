@@ -3,7 +3,7 @@
 #Filename:    CMakeLists.txt
 #-----------------------------------------------------------------------------
 #
-#This source file is part of the
+#This source file modifried from the
 #   ___                 __    __ _ _    _ 
 #  /___\__ _ _ __ ___  / / /\ \ (_) | _(_)
 # //  // _` | '__/ _ \ \ \/  \/ / | |/ / |
@@ -19,12 +19,10 @@ cmake_minimum_required(VERSION 2.6)
 set(APP "OgreApp")
  
 set(HDRS
-	./src/BaseApplication.h
 	./src/TutorialApplication.h
 )
  
 set(SRCS
-	./src/BaseApplication.cpp
 	./src/TutorialApplication.cpp
 )
  

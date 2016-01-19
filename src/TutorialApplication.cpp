@@ -1,286 +1,192 @@
-/*
------------------------------------------------------------------------------
-Filename:    TutorialApplication.cpp
------------------------------------------------------------------------------
-
-This source file is part of the
-   ___                 __    __ _ _    _ 
-  /___\__ _ _ __ ___  / / /\ \ (_) | _(_)
- //  // _` | '__/ _ \ \ \/  \/ / | |/ / |
-/ \_// (_| | | |  __/  \  /\  /| |   <| |
-\___/ \__, |_|  \___|   \/  \/ |_|_|\_\_|
-      |___/                              
-      Tutorial Framework
-      http://www.ogre3d.org/tikiwiki/
------------------------------------------------------------------------------
-*/
 #include "TutorialApplication.h"
 
+
 TutorialApplication::TutorialApplication()
-  : mTerrainGroup(0),
-    mTerrainGlobals(0),
-    mInfoLabel(0)
+    : mRoot(0),
+    mResourcesCfg(Ogre::StringUtil::BLANK),
+    mPluginsCfg(Ogre::StringUtil::BLANK)
 {
 }
 
 TutorialApplication::~TutorialApplication()
 {
+    /* Remove ourself as a Window listener */
+    Ogre::WindowEventUtilities::removeWindowEventListener(mWindow, this);
+    windowClosed(mWindow);
+    delete mRoot;
 }
 
-void TutorialApplication::createScene()
+bool TutorialApplication::go()
 {
-    mCamera->setPosition(Ogre::Vector3(1683, 50, 2116));
-    mCamera->lookAt(Ogre::Vector3(1963, 50, 1660));
-    mCamera->setNearClipDistance(.1);
+#ifdef _DEBUG
+    mResourcesCfg = "resources_d.cfg";
+    mPluginsCfg = "plugins_d.cfg";
+#else
+    mResourcesCfg = "resources.cfg";
+    mPluginsCfg = "plugins.cfg";
+#endif
 
-    bool infiniteClip =
-        mRoot->getRenderSystem()->getCapabilities()->hasCapability(
-                Ogre::RSC_INFINITE_FAR_PLANE);
+    mRoot = new Ogre::Root(mPluginsCfg);
 
-    if (infiniteClip)
-        mCamera->setFarClipDistance(0);
-    else
-        mCamera->setFarClipDistance(50000);
-
-    mSceneMgr->setAmbientLight(Ogre::ColourValue(.2, .2, .2));
-
-    Ogre::Vector3 lightDir(.55, -.3, .75);
-    lightDir.normalise();
-
-    Ogre::Light* light = mSceneMgr->createLight("TestLight");
-    light->setType(Ogre::Light::LT_DIRECTIONAL);
-    light->setDirection(lightDir);
-    light->setDiffuseColour(Ogre::ColourValue::White);
-    light->setSpecularColour(Ogre::ColourValue(.4, .4, .4));
-
-    // Fog
-    Ogre::ColourValue fadeColour(.9, .9, .9);
-    mWindow->getViewport(0)->setBackgroundColour(fadeColour);
-
-    mSceneMgr->setFog(Ogre::FOG_EXP2, fadeColour, 0.002);
-
-    // Terrain
-    mTerrainGlobals = OGRE_NEW Ogre::TerrainGlobalOptions();
-
-    mTerrainGroup = OGRE_NEW Ogre::TerrainGroup(
-            mSceneMgr,
-            Ogre::Terrain::ALIGN_X_Z,
-            513, 15000.0);
-    mTerrainGroup->setFilenameConvention(Ogre::String("terrain"), Ogre::String("dat"));
-    mTerrainGroup->setOrigin(Ogre::Vector3::ZERO);
-
-    configureTerrainDefaults(light);
-
-    for (long x = 0; x <= 0; ++x)
-        for (long y = 0; y <= 0; ++y)
-            defineTerrain(x, y);
-
-    mTerrainGroup->loadAllTerrains(true);
-
-    if (mTerrainsImported)
+    /* Load resource configuration */
+    Ogre::ConfigFile cf;
+    cf.load(mResourcesCfg);
+    Ogre::String name, locType;
+    Ogre::ConfigFile::SectionIterator secIt = cf.getSectionIterator();
+    while (secIt.hasMoreElements())
     {
-        Ogre::TerrainGroup::TerrainIterator ti = mTerrainGroup->getTerrainIterator();
-
-        while (ti.hasMoreElements())
+        Ogre::ConfigFile::SettingsMultiMap* settings = secIt.getNext();
+        Ogre::ConfigFile::SettingsMultiMap::iterator it;
+        for (it = settings->begin(); it != settings->end(); ++it)
         {
-            Ogre::Terrain* t = ti.getNext()->instance;
-            initBlendMaps(t);
+            locType = it->first;
+            name = it->second;
+            Ogre::ResourceGroupManager::getSingleton()
+                .addResourceLocation(name, locType);
         }
     }
+    /* Alt: Manually Configure the rendering system. */
+    //RenderSystem* rs = mRoot->getRenderSystemByName("Direct3D9 Rendering Subsystem");
+    // 
+    //mRoot->setRenderSystem(rs);
+    //rs->setConfigOption("Full Screen", "No");
+    //rs->setConfigOption("Video Mode", "800 x 600 @ 32-bit colour");
+   
+    /* Create rendering window using OGRE. */
+    if(!(mRoot->restoreConfig() || mRoot->showConfigDialog()))
+        return false; // should throw exception and delete ogre.cfg
+    mWindow = mRoot->initialise(true, "TutorialApplication Render Window");
 
-    mTerrainGroup->freeTemporaryResources();
+    /* Alt: Create rendering window using Win32 API. */
+    //mRoot->initialise(false);
 
-    // Sky Techniques
-    mSceneMgr->setSkyBox(true, "Examples/SpaceSkyBox", 300, false);
-    //mSceneMgr->setSkyDome(true, "Examples/CloudySky", 5, 8);
-    // Ogre::Plane plane;
-    // plane.d = 1000;
-    // plane.normal = Ogre::Vector3::NEGATIVE_UNIT_Y;
+    //HWND hWnd = 0;
 
-    // mSceneMgr->setSkyPlane(
-    //   true, plane, "Examples/SpaceSkyPlane", 1500, 40, true, 1.5, 150, 150);
+    //// Retrieve the HWND for the window we want to render in.
+    //// This step depends entirely on the windowing system you are using.
 
-}
+    //NameValuePairList misc;
+    //misc["externalWindowHandle"] = StringConverter::toString((int)hWnd);
 
-void TutorialApplication::createFrameListener()
-{
-    BaseApplication::createFrameListener();
+    //RenderWindow* win = mRoot->createRenderWindow("Main RenderWindow", 800, 600, false, &misc);
+   
+    /* Define number of mipmaps. */
+    Ogre::TextureManager::getSingleton().setDefaultNumMipmaps(5);
+   
+    /* Initialize all resources found. */
+    Ogre::ResourceGroupManager::getSingleton().initialiseAllResourceGroups();
 
-    mInfoLabel = mTrayMgr->createLabel(OgreBites::TL_TOP, "TerrainInfo", "", 350);
-}
+    /* Create default scene manager. */
+    mSceneMgr = mRoot->createSceneManager(Ogre::ST_GENERIC);
 
-void TutorialApplication::destroyScene()
-{
-    OGRE_DELETE mTerrainGroup;
-    OGRE_DELETE mTerrainGlobals;
-}
-
-bool TutorialApplication::frameRenderingQueued(const Ogre::FrameEvent& fe)
-{
-    bool ret = BaseApplication::frameRenderingQueued(fe);
-
-    if (mTerrainGroup->isDerivedDataUpdateInProgress())
-    {
-        mTrayMgr->moveWidgetToTray(mInfoLabel, OgreBites::TL_TOP, 0);
-        mInfoLabel->show();
-
-        if (mTerrainsImported)
-            mInfoLabel->setCaption("Building terrain...");
-        else
-            mInfoLabel->setCaption("Updating textures...");
-    }
-    else
-    {
-        mTrayMgr->removeWidgetFromTray(mInfoLabel);
-        mInfoLabel->hide();
-
-        if (mTerrainsImported)
-        {
-            mTerrainGroup->saveAllTerrains(true);
-            mTerrainsImported = false;
-        }
-    }
-
-    return ret;
-}
-
-void getTerrainImage(bool flipX, bool flipY, Ogre::Image& img)
-{
-    img.load("terrain.png", Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME);
-
-    if (flipX)
-        img.flipAroundY();
-    if (flipY)
-        img.flipAroundX();
-
-}
-
-void TutorialApplication::defineTerrain(long x, long y)
-{
-    Ogre::String filename = mTerrainGroup->generateFilename(x, y);
-
-    bool exists =
-        Ogre::ResourceGroupManager::getSingleton().resourceExists(
-                mTerrainGroup->getResourceGroup(),
-                filename);
-
-    if (exists)
-        mTerrainGroup->defineTerrain(x, y);
-    else
-    {
-        Ogre::Image img;
-        getTerrainImage(x % 2 != 0, y % 2 != 0, img);
-        mTerrainGroup->defineTerrain(x, y, &img);
-
-        mTerrainsImported = true;
-    }
-}
-
-void TutorialApplication::initBlendMaps(Ogre::Terrain* terrain)
-{
-    Ogre::Real minHeight0 = 70;
-    Ogre::Real fadeDist0 = 40;
-    Ogre::Real minHeight1 = 70;
-    Ogre::Real fadeDist1 = 15;
-
-    Ogre::TerrainLayerBlendMap* blendMap0 = terrain->getLayerBlendMap(1);
-    Ogre::TerrainLayerBlendMap* blendMap1 = terrain->getLayerBlendMap(2);
-
-    float* pBlend0 = blendMap0->getBlendPointer();
-    float* pBlend1 = blendMap1->getBlendPointer();
-
-    for (Ogre::uint16 y = 0; y < terrain->getLayerBlendMapSize(); ++y)
-    {
-        for (Ogre::uint16 x = 0; x < terrain->getLayerBlendMapSize(); ++x)
-        {
-            Ogre::Real tx, ty;
-
-            blendMap0->convertImageToTerrainSpace(x, y, &tx, &ty);
-            Ogre::Real height = terrain->getHeightAtTerrainPosition(tx, ty);
-            Ogre::Real val = (height - minHeight0) / fadeDist0;
-            val = Ogre::Math::Clamp(val, (Ogre::Real)0, (Ogre::Real)1);
-            *pBlend0++ = val;
-
-            val = (height - minHeight1) / fadeDist1;
-            val = Ogre::Math::Clamp(val, (Ogre::Real)0, (Ogre::Real)1);
-            *pBlend1++ = val;
-        }
-    }
-
-    blendMap0->dirty();
-    blendMap1->dirty();
-    blendMap0->update();
-    blendMap1->update();
-
-}
-
-void TutorialApplication::configureTerrainDefaults(Ogre::Light* light)
-{
-    mTerrainGlobals->setMaxPixelError(8);
-    mTerrainGlobals->setCompositeMapDistance(10000);
-
-    mTerrainGlobals->setLightMapDirection(light->getDerivedDirection());
-    mTerrainGlobals->setCompositeMapAmbient(mSceneMgr->getAmbientLight());
-    mTerrainGlobals->setCompositeMapDiffuse(light->getDiffuseColour());
-
-    Ogre::Terrain::ImportData& importData = mTerrainGroup->getDefaultImportSettings();
-    importData.terrainSize = 513;
-    importData.worldSize = 15000.0;
-    importData.inputScale = 600;
-    importData.minBatchSize = 33;
-    importData.maxBatchSize = 65;
-
-    importData.layerList.resize(3);
-    importData.layerList[0].worldSize = 100;
-    importData.layerList[0].textureNames.push_back(
-            "dirt_grayrocky_diffusespecular.dds");
-    importData.layerList[0].textureNames.push_back(
-            "dirt_grayrocky_normalheight.dds");
-    importData.layerList[1].worldSize = 30;
-    importData.layerList[1].textureNames.push_back(
-            "grass_green-01_diffusespecular.dds");
-    importData.layerList[1].textureNames.push_back(
-            "grass_green-01_normalheight.dds");
-    importData.layerList[2].worldSize = 200;
-    importData.layerList[2].textureNames.push_back(
-            "growth_weirdfungus-03_diffusespecular.dds");
-    importData.layerList[2].textureNames.push_back(
-            "growth_weirdfungus-03_normalheight.dds");
-
-}
-/*
-void TutorialApplication::createCamera()
-{
-    mCamera = mSceneMgr->createCamera("PlayerCam");
-
-    mCamera->setPosition(Ogre::Vector3(1683, 50, 2116));
-    mCamera->lookAt(Ogre::Vector3(1963, 50, 1660));
-    mCamera->setNearClipDistance(0.1);
-
-    bool infiniteClip =
-          mRoot->getRenderSystem()->getCapabilities()->hasCapability(
-                      Ogre::RSC_INFINITE_FAR_PLANE);
+    /* Set up camera. */
+    mCamera = mSceneMgr->createCamera("MainCam");
      
-    if (infiniteClip)
-          mCamera->setFarClipDistance(0);
-    else
-          mCamera->setFarClipDistance(50000);
+    mCamera->setPosition(0, 0, 80);
+    mCamera->lookAt(0, 0, -300);
+    mCamera->setNearClipDistance(5);
 
-    mCameraMan = new OgreBites::SdkCameraMan(mCamera);
-}
-*/
-/*
-void TutorialApplication::createViewports()
-{
+    /* Declare and create a viewport. */
     Ogre::Viewport* vp = mWindow->addViewport(mCamera);
 
-    vp->setBackgroundColour(Ogre::ColourValue(0.1, 0, 0));
+    vp->setBackgroundColour(Ogre::ColourValue(0,0,0));
 
     mCamera->setAspectRatio(
-            Ogre::Real(vp->getActualWidth()) /
+            Ogre::Real(vp->getActualWidth()) / 
             Ogre::Real(vp->getActualHeight()));
+    
+    /* Set up scene. */
+    Ogre::Entity* ogreEntity = mSceneMgr->createEntity("ogrehead.mesh");
+
+    Ogre::SceneNode* ogreNode = mSceneMgr
+        ->getRootSceneNode()
+        ->createChildSceneNode();
+    ogreNode->attachObject(ogreEntity);
+
+    mSceneMgr->setAmbientLight(Ogre::ColourValue(.5, .5, .5));
+
+    Ogre::Light* light = mSceneMgr->createLight("MainLight");
+    light->setPosition(20, 80, 50);
+
+    /* Set up Inputmanager */
+    Ogre::LogManager::getSingletonPtr()->logMessage("*** Initializing OIS ***");
+    OIS::ParamList pl;
+    size_t windowHnd = 0;
+    std::ostringstream windowHndStr;
+     
+    mWindow->getCustomAttribute("WINDOW", &windowHnd);
+    windowHndStr << windowHnd;
+    pl.insert(std::make_pair(std::string("WINDOW"), windowHndStr.str()));
+     
+    mInputManager = OIS::InputManager::createInputSystem( pl );
+
+    /* I want keyboard and mouse. (false->unbuffered) */
+    mKeyboard = static_cast<OIS::Keyboard*>(mInputManager
+            ->createInputObject(OIS::OISKeyboard, false));
+    mMouse = static_cast<OIS::Mouse*>(mInputManager
+            ->createInputObject(OIS::OISMouse, false));
+
+    // Why is this in BaseApplication? TODO: research
+    //mMouse->setEventCallback(this);
+    //mKeyboard->setEventCallback(this);
+
+    /* Register application as WindowEventListener */
+    //Set initial mouse clipping size
+    windowResized(mWindow);
+    //Register as a Window listener
+    Ogre::WindowEventUtilities::addWindowEventListener(mWindow, this);
+
+    /* Listen to frame events and render. */
+    mRoot->addFrameListener(this);
+    mRoot->startRendering();
+
+    return true;
 }
-*/
+
+//Adjust mouse clipping area
+void TutorialApplication::windowResized(Ogre::RenderWindow* rw)
+{
+    unsigned int width, height, depth;
+    int left, top;
+    rw->getMetrics(width, height, depth, left, top);
+
+    const OIS::MouseState &ms = mMouse->getMouseState();
+    ms.width = width;
+    ms.height = height;
+}
+
+//Unattach OIS before window shutdown (very important under Linux)
+void TutorialApplication::windowClosed(Ogre::RenderWindow* rw)
+{
+    //Only close for window that created OIS (the main window in these demos)
+    if(rw == mWindow)
+    {
+        if(mInputManager)
+        {
+            mInputManager->destroyInputObject( mMouse );
+            mInputManager->destroyInputObject( mKeyboard );
+
+            OIS::InputManager::destroyInputSystem(mInputManager);
+            mInputManager = 0;
+        }
+    }
+}
+
+bool TutorialApplication::frameRenderingQueued(const Ogre::FrameEvent& evt)
+{
+    if(mWindow->isClosed())
+        return false;
+
+    //Need to capture/update each device
+    mKeyboard->capture();
+    mMouse->capture();
+
+    if(mKeyboard->isKeyDown(OIS::KC_ESCAPE))
+        return false;
+
+    return true;
+}
+
 
 #if OGRE_PLATFORM == OGRE_PLATFORM_WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -294,25 +200,25 @@ extern "C" {
 #if OGRE_PLATFORM == OGRE_PLATFORM_WIN32
     INT WINAPI WinMain( HINSTANCE hInst, HINSTANCE, LPSTR strCmdLine, INT )
 #else
-    int main(int argc, char *argv[])
+        int main(int argc, char *argv[])
 #endif
-    {
-        // Create application object
-        TutorialApplication app;
+        {
+            // Create application object
+            TutorialApplication app;
 
-        try {
-            app.go();
-        } catch( Ogre::Exception& e ) {
+            try {
+                app.go();
+            } catch( Ogre::Exception& e ) {
 #if OGRE_PLATFORM == OGRE_PLATFORM_WIN32
-            MessageBox( NULL, e.getFullDescription().c_str(), "An exception has occured!", MB_OK | MB_ICONERROR | MB_TASKMODAL);
+                MessageBox( NULL, e.getFullDescription().c_str(), "An exception has occured!", MB_OK | MB_ICONERROR | MB_TASKMODAL);
 #else
-            std::cerr << "An exception has occured: " <<
-                e.getFullDescription().c_str() << std::endl;
+                std::cerr << "An exception has occured: " <<
+                    e.getFullDescription().c_str() << std::endl;
 #endif
-        }
+            }
 
-        return 0;
-    }
+            return 0;
+        }
 
 #ifdef __cplusplus
 }

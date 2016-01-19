@@ -1,52 +1,49 @@
-/*
------------------------------------------------------------------------------
-Filename:    TutorialApplication.h
------------------------------------------------------------------------------
+#include <OgreRoot.h>
+#include <OgreException.h>
+#include <OgreConfigFile.h>
+#include <OgreSceneManager.h>
+#include <OgreCamera.h>
+#include <OgreEntity.h>
+#include <OgreWindowEventUtilities.h>
+#include "OgreRenderWindow.h"
+#include "OgreViewport.h"
 
-This source file is part of the
-   ___                 __    __ _ _    _ 
-  /___\__ _ _ __ ___  / / /\ \ (_) | _(_)
- //  // _` | '__/ _ \ \ \/  \/ / | |/ / |
-/ \_// (_| | | |  __/  \  /\  /| |   <| |
-\___/ \__, |_|  \___|   \/  \/ |_|_|\_\_|
-      |___/                              
-      Tutorial Framework
-      http://www.ogre3d.org/tikiwiki/
------------------------------------------------------------------------------
-*/
-#ifndef __TutorialApplication_h_
-#define __TutorialApplication_h_
+#include <OISEvents.h>
+#include <OISInputManager.h>
+#include <OISKeyboard.h>
+#include <OISMouse.h>
 
-#include <Terrain/OgreTerrain.h>
-#include <Terrain/OgreTerrainGroup.h>
 
-#include "BaseApplication.h"
-
-class TutorialApplication : public BaseApplication
+class TutorialApplication
+  : public Ogre::WindowEventListener,
+    public Ogre::FrameListener
 {
     public:
         TutorialApplication();
         virtual ~TutorialApplication();
 
+        bool go();
+    
     protected:
-        virtual void createScene();
+        // Ogre::WindowEventListener
+        virtual void windowResized(Ogre::RenderWindow* rw);
+        virtual void windowClosed(Ogre::RenderWindow* rw);
 
-        //virtual void createCamera();
-        //virtual void createViewports();
-
-        virtual void createFrameListener();
-        virtual void destroyScene();
-        virtual bool frameRenderingQueued(const Ogre::FrameEvent& fe);
+        // Ogre::FrameListener
+        virtual bool frameRenderingQueued(const Ogre::FrameEvent& evt);
 
     private:
-        void defineTerrain(long x, long y);
-        void initBlendMaps(Ogre::Terrain* terrain);
-        void configureTerrainDefaults(Ogre::Light* light);
+        Ogre::Root* mRoot;
+        Ogre::String mResourcesCfg;
+        Ogre::String mPluginsCfg;
 
-        bool mTerrainsImported;
-        Ogre::TerrainGroup* mTerrainGroup;
-        Ogre::TerrainGlobalOptions* mTerrainGlobals;
-        OgreBites::Label* mInfoLabel;
+        Ogre::RenderWindow* mWindow;
 
+        Ogre::SceneManager* mSceneMgr;
+
+        Ogre::Camera* mCamera;
+
+        OIS::InputManager* mInputManager;
+        OIS::Mouse* mMouse;
+        OIS::Keyboard* mKeyboard;
 };
-#endif // #ifndef __TutorialApplication_h_
